@@ -1,0 +1,30 @@
+{
+  "name": "scrypted-nvr-backup",
+  "version": "1.0.0",
+  "description": "Automated backup script for Scrypted NVR to Google Cloud Storage",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/backup.js",
+    "dev": "ts-node src/backup.ts",
+    "test": "ts-node src/test-scrypted.ts",
+    "verify": "ts-node src/verify.ts",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.12.1",
+    "@scrypted/sdk": "^0.0.108",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "typescript": "^5.5.4",
+    "ts-node": "^10.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Kilo Code",
+  "license": "MIT"
+}
