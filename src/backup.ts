@@ -288,4 +288,4 @@ if (require.main === module) {
   main().catch(err => log.error(err));
 }
 
-export { main, readLastTimestamp, updateLastTimestamp };
+export { main, readLastTimestamp, updateLastTimestamp, withRetry, uploadToGCSWithRetry };
