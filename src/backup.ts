@@ -4,15 +4,23 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Storage } from '@google-cloud/storage';
-import * as Scrypted from '@scrypted/sdk';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
 
-// compat connect helper (SDK surface varies by version; prefer runtime connect if present)
-const connectSdk: (opts: any) => Promise<any> =
-  ((Scrypted as any).connect ?? (Scrypted as any).default ?? (Scrypted as any)) as any;
+// Lazy require for @scrypted/sdk to avoid initializing the SDK at module load time
+// (the SDK tries to access runtime globals which are not present in test environments).
+// connectSdk will require the module only when main() runs.
+const connectSdk: (opts: any) => Promise<any> = async (opts: any) => {
+  // require at runtime to avoid side effects during test import
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const Scrypted = require('@scrypted/sdk');
+  const connect = (Scrypted as any).connect ?? (Scrypted as any).default ?? (Scrypted as any);
+  if (typeof connect === 'function')
+    return connect(opts);
+  return connect;
+};
 
 // No longer need connectSdk shim
 
