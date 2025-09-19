@@ -4,15 +4,29 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Storage } from '@google-cloud/storage';
-import * as Scrypted from '@scrypted/sdk';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
 
-// compat connect helper (SDK surface varies by version; prefer runtime connect if present)
-const connectSdk: (opts: any) => Promise<any> =
-  ((Scrypted as any).connect ?? (Scrypted as any).default ?? (Scrypted as any)) as any;
+// Helper to lazily require the @scrypted/sdk runtime if available
+function getScryptedRuntime(): any | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('@scrypted/sdk');
+  } catch (e) {
+    return undefined;
+  }
+}
+
+// connectSdk will attempt to use the runtime connect if present
+const connectSdk: (opts: any) => Promise<any> = async (opts: any) => {
+  const Scrypted = getScryptedRuntime();
+  const connect = (Scrypted as any)?.connect ?? (Scrypted as any)?.default ?? (Scrypted as any);
+  if (typeof connect === 'function')
+    return connect(opts);
+  return connect;
+};
 
 // No longer need connectSdk shim
 
@@ -172,8 +186,16 @@ async function extractNewClips(
   const videoClipsDevices = devices
     .filter((device: any) => {
       const interfaces = device.interfaces as string[] || [];
-      const iface = (Scrypted as any).ScryptedInterface;
-      return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
+      let iface: any;
+        try {
+          // require lazily for type reference if available at runtime
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const ScryptedRuntime = require('@scrypted/sdk');
+          iface = (ScryptedRuntime as any).ScryptedInterface;
+        } catch (e) {
+          iface = undefined;
+        }
+        return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
     })
     .filter((d: any) => 'videoClips' in d);
 
@@ -246,7 +268,13 @@ async function main(): Promise<void> {
         const videoClipsDevices = devices
           .filter((device: any) => {
             const interfaces = device.interfaces as string[] || [];
-            const iface = (Scrypted as any).ScryptedInterface;
+            let iface: any;
+            try {
+              const ScryptedRuntime = getScryptedRuntime();
+              iface = (ScryptedRuntime as any)?.ScryptedInterface;
+            } catch (e) {
+              iface = undefined;
+            }
             return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
           })
           .filter((d: any) => 'videoClips' in d);
@@ -288,4 +316,4 @@ if (require.main === module) {
   main().catch(err => log.error(err));
 }
 
-export { main, readLastTimestamp, updateLastTimestamp };
+export { main, readLastTimestamp, updateLastTimestamp, withRetry, uploadToGCSWithRetry };
