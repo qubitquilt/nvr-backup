@@ -52,7 +52,7 @@ async function testUploadToGCSWithRetryBuffer() {
   const buf = Buffer.from('hello');
   await uploadToGCSWithRetry(mockBucket, 'obj.mp4', buf, 'video/mp4');
 
-  assert.ok(savedBuffer && savedBuffer.equals(buf), 'buffer should be saved');
+  assert.ok(savedBuffer && Buffer.compare(savedBuffer, buf) === 0, 'buffer should be saved');
   assert.strictEqual(savedOptions.metadata.contentType, 'video/mp4');
   console.log('testUploadToGCSWithRetryBuffer passed');
 }
