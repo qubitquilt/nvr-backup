@@ -9,14 +9,20 @@ import * as dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-// Lazy require for @scrypted/sdk to avoid initializing the SDK at module load time
-// (the SDK tries to access runtime globals which are not present in test environments).
-// connectSdk will require the module only when main() runs.
+// Helper to lazily require the @scrypted/sdk runtime if available
+function getScryptedRuntime(): any | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('@scrypted/sdk');
+  } catch (e) {
+    return undefined;
+  }
+}
+
+// connectSdk will attempt to use the runtime connect if present
 const connectSdk: (opts: any) => Promise<any> = async (opts: any) => {
-  // require at runtime to avoid side effects during test import
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const Scrypted = require('@scrypted/sdk');
-  const connect = (Scrypted as any).connect ?? (Scrypted as any).default ?? (Scrypted as any);
+  const Scrypted = getScryptedRuntime();
+  const connect = (Scrypted as any)?.connect ?? (Scrypted as any)?.default ?? (Scrypted as any);
   if (typeof connect === 'function')
     return connect(opts);
   return connect;
@@ -262,7 +268,13 @@ async function main(): Promise<void> {
         const videoClipsDevices = devices
           .filter((device: any) => {
             const interfaces = device.interfaces as string[] || [];
-            const iface = (Scrypted as any).ScryptedInterface;
+            let iface: any;
+            try {
+              const ScryptedRuntime = getScryptedRuntime();
+              iface = (ScryptedRuntime as any)?.ScryptedInterface;
+            } catch (e) {
+              iface = undefined;
+            }
             return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
           })
           .filter((d: any) => 'videoClips' in d);
