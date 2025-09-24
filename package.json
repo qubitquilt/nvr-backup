@@ -11,8 +11,8 @@
     "test:unit": "ts-node tests/backup.test.ts",
     "test:smoke": "ts-node src/test-scrypted.ts",
     "verify": "ts-node src/verify.ts",
-    "lint": "eslint --config .eslintrc.json . --ext .ts",
-    "lint:fix": "eslint --config .eslintrc.json . --ext .ts --fix"
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.12.1",
@@ -21,9 +21,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
-    "@typescript-eslint/eslint-plugin": "^8.44.1",
-    "@typescript-eslint/parser": "^8.44.1",
-    "eslint": "^9.36.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.57.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
   },
