@@ -1,11 +1,11 @@
 // Scrypted NVR Backup Verification Script
 // This script provides a dry-run mode for the backup process and verifies GCS lifecycle policy.
 
-import * as fs from 'fs/promises';
+
 import { Storage } from '@google-cloud/storage';
 import connectDefault, { ScryptedInterface } from '@scrypted/sdk';
 import * as dotenv from 'dotenv';
-import { main as backupMain, readLastTimestamp, updateLastTimestamp } from './backup';
+import { main as backupMain } from './backup';
 
 // cross-compat connect() typing shim
 const connect = connectDefault as unknown as (opts: any) => Promise<any>;
@@ -33,21 +33,7 @@ const log = {
 };
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-async function withRetry<T>(fn: () => Promise<T>, label: string, attempts = 3): Promise<T> {
-  let lastErr: any;
-  for (let i = 1; i <= attempts; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      if (i === attempts) break;
-      const delay = Math.pow(2, i) * 1000;
-      log.warn(`${label} attempt ${i} failed, retrying in ${delay}ms:`, err);
-      await sleep(delay);
-    }
-  }
-  throw new Error(`${label} failed after ${attempts} attempts: ${lastErr}`);
-}
+
 
 async function testScryptedConnection(): Promise<boolean> {
   log.info('Testing Scrypted connection...');
