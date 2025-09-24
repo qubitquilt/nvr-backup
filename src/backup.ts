@@ -11,7 +11,7 @@ import pLimit from 'p-limit';
 dotenv.config();
 
 // Helper to lazily require the @scrypted/sdk runtime if available
-function getScryptedRuntime(): any | undefined {
+export function getScryptedRuntime(): any | undefined {
   if (process.env.NODE_ENV === 'test') {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { PassThrough } = require('stream');
@@ -49,7 +49,7 @@ function getScryptedRuntime(): any | undefined {
 }
 
 // connectSdk will attempt to use the runtime connect if present
-const connectSdk: (opts: any) => Promise<any> = async (opts: any) => {
+export const connectSdk: (opts: any) => Promise<any> = async (opts: any) => {
   const Scrypted = getScryptedRuntime();
   const connect = (Scrypted as any)?.connect ?? (Scrypted as any)?.default ?? (Scrypted as any);
   if (typeof connect === 'function')
@@ -75,7 +75,7 @@ const MAX_CONCURRENT_UPLOADS = parseInt(process.env.MAX_CONCURRENT_UPLOADS || '3
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 const levelOrder: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 const currentLevel = levelOrder[(LOG_LEVEL as LogLevel)] ?? 20;
-const log = {
+export const log = {
   debug: (...args: any[]) => { if (currentLevel <= 10) console.debug('[DEBUG]', ...args); },
   info:  (...args: any[]) => { if (currentLevel <= 20) console.info('[INFO]', ...args); },
   warn:  (...args: any[]) => { if (currentLevel <= 30) console.warn('[WARN]', ...args); },
@@ -107,7 +107,7 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, attempts = 3): 
  */
 function getVideoClipsDevice(scrypted: any): any {
   if (process.env.NODE_ENV === 'test') {
-    const testDevices = scrypted.getDevices();
+    const testDevices = scrypted.deviceManager.getDevices();
     const testVideoClipsDevices = testDevices.filter((d: any) => 'videoClips' in d);
     if (testVideoClipsDevices.length === 0) {
       throw new Error('No VideoClips device found');
@@ -381,4 +381,4 @@ if (require.main === module) {
   main().catch(err => log.error(err));
 }
 
-export { main, readLastTimestamp, updateLastTimestamp, withRetry, uploadToGCSWithRetry };
+export { main, readLastTimestamp, updateLastTimestamp, withRetry, uploadToGCSWithRetry, getVideoClipsDevice, createGCSClient };

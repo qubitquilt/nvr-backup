@@ -13,6 +13,7 @@
   ],
   "exclude": [
     "src/**/*.d.ts",
+    "src/test-scrypted.ts",
     "node_modules/**"
   ]
 }

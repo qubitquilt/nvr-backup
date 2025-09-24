@@ -2,7 +2,7 @@
 // This script provides a dry-run mode for the backup process and verifies GCS lifecycle policy.
 
 
-import { main as backupMain } from './backup';
+import * as backup from './backup';
 
 import * as dotenv from 'dotenv';
 
@@ -97,6 +97,9 @@ async function testScryptedConnection(): Promise<boolean> {
 async function testGCSConnection(): Promise<boolean> {
   log.info('Testing Google Cloud Storage connection...');
   try {
+    if (process.env.NODE_ENV === 'test') {
+      GCSStorage = (global as any).Storage;
+    }
     if (!process.env.GCS_PROJECT_ID || !process.env.GCS_BUCKET_NAME || !process.env.GCS_KEYFILE_PATH) {
       log.error('GCS configuration missing: PROJECT_ID, BUCKET_NAME, KEYFILE_PATH');
       return false;
@@ -117,6 +120,9 @@ async function testGCSConnection(): Promise<boolean> {
 async function verifyGCSLifecyclePolicy(): Promise<boolean> {
   log.info('Verifying GCS lifecycle policy...');
   try {
+    if (process.env.NODE_ENV === 'test') {
+      GCSStorage = (global as any).Storage;
+    }
     if (!GCS_BUCKET_NAME) {
       log.error('GCS_BUCKET_NAME is not defined.');
       return false;
@@ -165,7 +171,7 @@ async function runDryRunBackup(): Promise<boolean> {
   };
 
   try {
-    await backupMain();
+    await backup.main();
     log.info('Dry-run backup completed successfully.');
     return true;
   } catch (error) {
@@ -224,5 +230,6 @@ module.exports = {
   runDryRunBackup,
   mainVerification,
   connect,
-  ScryptedInterface
+  ScryptedInterface,
+  GCSStorage
 };
