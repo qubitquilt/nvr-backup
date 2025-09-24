@@ -1,0 +1,1 @@
+{"parent":null,"pid":4456,"argv":["/usr/bin/node","/usr/bin/npm","run","test:unit"],"execArgv":[],"cwd":"/workspace/nvr-backup","time":1758745971636,"ppid":4444,"coverageFilename":"/workspace/nvr-backup/.nyc_output/40ba2525-2559-4621-9232-23a8856245e9.json","externalId":"","uuid":"40ba2525-2559-4621-9232-23a8856245e9","files":[]}

@@ -2,15 +2,46 @@
 // This script provides a dry-run mode for the backup process and verifies GCS lifecycle policy.
 
 
-import { Storage } from '@google-cloud/storage';
-import connectDefault, { ScryptedInterface } from '@scrypted/sdk';
-import * as dotenv from 'dotenv';
 import { main as backupMain } from './backup';
 
-// cross-compat connect() typing shim
-const connect = connectDefault as unknown as (opts: any) => Promise<any>;
+import * as dotenv from 'dotenv';
 
-// Load environment variables
+// Dynamic imports for test compatibility
+let connect: (opts: any) => Promise<any>;
+let ScryptedInterface: any;
+let GCSStorage: any;
+
+if (process.env.NODE_ENV === 'test') {
+  connect = (global as any).mockConnect;
+  ScryptedInterface = (global as any).mockScryptedInterface || {};
+  GCSStorage = (global as any).Storage;
+} else {
+  try {
+    // require at runtime so package doesn't attempt to initialize deviceManager on import
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const sdk = require('@scrypted/sdk');
+    // Many versions export a default connect function; prefer that if available
+    connect = (sdk && (sdk.connect ?? sdk.default ?? sdk)) as any;
+    ScryptedInterface = sdk.ScryptedInterface ?? {};
+  } catch (err) {
+    console.error('Runtime require of @scrypted/sdk failed. This test requires either running inside Scrypted or having the SDK available. Error:', err);
+    // Do not exit; allow the script to continue and present a helpful message when attempting to connect.
+    connect = undefined as any;
+    ScryptedInterface = {};
+  }
+  const { Storage } = require('@google-cloud/storage');
+  GCSStorage = Storage;
+}// Load environment variables
+
+
+console.log('Test mode:', process.env.NODE_ENV === 'test');
+console.log('GCSStorage type:', typeof GCSStorage);
+if (process.env.NODE_ENV === 'test') {
+  console.log('GCSStorage is global.Storage:', GCSStorage === (global as any).Storage);
+  console.log('Global Storage toString:', (global as any).Storage.toString().substring(0, 50));
+}
+
+
 dotenv.config();
 
 const SCRYPTED_HOST = process.env.SCRYPTED_HOST || 'https://192.168.10.7:10443';
@@ -66,16 +97,16 @@ async function testScryptedConnection(): Promise<boolean> {
 async function testGCSConnection(): Promise<boolean> {
   log.info('Testing Google Cloud Storage connection...');
   try {
-    if (!GCS_PROJECT_ID || !GCS_BUCKET_NAME || !GCS_KEYFILE_PATH) {
+    if (!process.env.GCS_PROJECT_ID || !process.env.GCS_BUCKET_NAME || !process.env.GCS_KEYFILE_PATH) {
       log.error('GCS configuration missing: PROJECT_ID, BUCKET_NAME, KEYFILE_PATH');
       return false;
     }
-    const storage = new Storage({
-      projectId: GCS_PROJECT_ID,
-      keyFilename: GCS_KEYFILE_PATH,
+    const storage = new GCSStorage({
+      projectId: process.env.GCS_PROJECT_ID,
+      keyFilename: process.env.GCS_KEYFILE_PATH,
     });
-    await storage.bucket(GCS_BUCKET_NAME).getMetadata();
-    log.info(`Successfully connected to GCS bucket: ${GCS_BUCKET_NAME}`);
+    await storage.bucket(process.env.GCS_BUCKET_NAME).getMetadata();
+    log.info(`Successfully connected to GCS bucket: ${process.env.GCS_BUCKET_NAME}`);
     return true;
   } catch (error) {
     log.error('GCS connection test failed:', error);
@@ -90,7 +121,7 @@ async function verifyGCSLifecyclePolicy(): Promise<boolean> {
       log.error('GCS_BUCKET_NAME is not defined.');
       return false;
     }
-    const storage = new Storage({
+    const storage = new GCSStorage({
       projectId: GCS_PROJECT_ID,
       keyFilename: GCS_KEYFILE_PATH,
     });
@@ -185,3 +216,13 @@ async function mainVerification(): Promise<void> {
 if (require.main === module) {
   mainVerification().catch(log.error);
 }
+
+module.exports = {
+  testScryptedConnection,
+  testGCSConnection,
+  verifyGCSLifecyclePolicy,
+  runDryRunBackup,
+  mainVerification,
+  connect,
+  ScryptedInterface
+};

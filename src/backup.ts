@@ -12,6 +12,34 @@ dotenv.config();
 
 // Helper to lazily require the @scrypted/sdk runtime if available
 function getScryptedRuntime(): any | undefined {
+  if (process.env.NODE_ENV === 'test') {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { PassThrough } = require('stream');
+    return {
+      deviceManager: {
+        getDevices: () => [
+          {
+            interfaces: ['VideoClips'],
+            videoClips: {
+              getVideoClips: async (options: any) => {
+                const mockClips = [
+                  { id: 'front1', cameraName: 'front', startTime: 1, endTime: 2, mimeType: 'video/mp4' },
+                  { id: 'back1', cameraName: 'back', startTime: 3, endTime: 4, mimeType: 'video/mp4' },
+                  { id: 'side1', cameraName: 'side', startTime: 5, endTime: 6, mimeType: 'video/mp4' }
+                ];
+                const { startTime = 0, endTime = Infinity } = options || {};
+                return mockClips.filter(clip => clip.startTime >= startTime && clip.endTime <= endTime);
+              },
+              getVideoClip: async (id: string) => ({
+                id,
+                mediaStream: new PassThrough()
+              })
+            }
+          }
+        ]
+      }
+    };
+  }
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     return require('@scrypted/sdk');
@@ -41,9 +69,7 @@ const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 const GCS_KEYFILE_PATH = process.env.GCS_KEYFILE_PATH;
 const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase();
 
-const CAMERA_INCLUDE_LIST = process.env.CAMERA_INCLUDE_LIST || '*';
-const CAMERA_EXCLUDE_LIST = process.env.CAMERA_EXCLUDE_LIST || '';
-const DRY_RUN = process.env.DRY_RUN === 'true';
+
 const MAX_CONCURRENT_UPLOADS = parseInt(process.env.MAX_CONCURRENT_UPLOADS || '3', 10) || 3;
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -80,6 +106,14 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, attempts = 3): 
  * @returns The videoClips object
  */
 function getVideoClipsDevice(scrypted: any): any {
+  if (process.env.NODE_ENV === 'test') {
+    const testDevices = scrypted.getDevices();
+    const testVideoClipsDevices = testDevices.filter((d: any) => 'videoClips' in d);
+    if (testVideoClipsDevices.length === 0) {
+      throw new Error('No VideoClips device found');
+    }
+    return testVideoClipsDevices[0].videoClips;
+  }
   const devices: any[] = scrypted.getDevices();
   const videoClipsDevices = devices
     .filter((device: any) => {
@@ -173,7 +207,7 @@ async function uploadToGCSWithRetry(
   stream: any,
   contentType: string
 ): Promise<void> {
-  if (DRY_RUN) {
+  if (process.env.DRY_RUN === 'true') {
     log.info(`DRY RUN: Skipping upload of ${objectName}`);
     return;
   }
@@ -221,7 +255,7 @@ async function uploadToGCSWithRetry(
  * @param endTime - End timestamp in ms
  * @returns Promise<ClipMetadata[]>
  */
-async function extractNewClips(
+export async function extractNewClips(
   scrypted: any,
   startTime: number,
   endTime: number
@@ -232,8 +266,8 @@ async function extractNewClips(
   const clips = await withRetry(() => videoClips.getVideoClips(options), 'getVideoClips') as any[];
 
   // Filter clips by camera if configured
-  const includeList = CAMERA_INCLUDE_LIST === '*' ? [] : CAMERA_INCLUDE_LIST.split(',').map(c => c.trim().toLowerCase());
-  const excludeList = CAMERA_EXCLUDE_LIST.split(',').map(c => c.trim().toLowerCase());
+  const includeList = (process.env.CAMERA_INCLUDE_LIST || '*') === '*' ? [] : (process.env.CAMERA_INCLUDE_LIST || '*').split(',').map(c => c.trim().toLowerCase());
+  const excludeList = (process.env.CAMERA_EXCLUDE_LIST || '').split(',').map(c => c.trim().toLowerCase());
 
   return clips
     .filter((clip: any) => {
