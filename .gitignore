@@ -1,3 +1,5 @@
 node_modules
 .bmad-core
 dist
+.nyc_output/
+coverage/
