@@ -5,6 +5,11 @@ import { Readable, PassThrough } from 'stream';
 import * as backup from '../src/backup';
 import * as sinon from 'sinon';
 process.env.NODE_ENV = 'test';
+
+
+/* eslint-disable no-global-assign, @typescript-eslint/no-var-requires, @typescript-eslint/no-unused-vars */
+
+
 async function testWithRetrySuccess() {
   let calls = 0;
   const fn = async () => {
@@ -73,6 +78,9 @@ async function testUploadToGCSWithRetryStream() {
   // Actually pipe will end pass when readable ends, so just wait for promise
   await promise;
   console.log('testUploadToGCSWithRetryStream passed');
+
+
+
 }
 	async function testDryRun() {
 
@@ -698,6 +706,47 @@ async function testGetVideoClipsDeviceNoDevices() {
   const uploadStub = sinon.stub(backup, 'uploadToGCSWithRetry').callsFake(async () => {});
   const readStub = sinon.stub(backup, 'readLastTimestamp').callsFake(async () => Date.now() - 3600000);
   const updateStub = sinon.stub(backup, 'updateLastTimestamp').callsFake(async () => {});
+
+(async () => {
+  try {
+    await testWithRetrySuccess();
+    await testWithRetryFail();
+    await testUploadToGCSWithRetryBuffer();
+    await testUploadToGCSWithRetryStream();
+
+    await testUploadToGCSWithRetryStreamError();
+    await testReadLastTimestampFallback();
+    await testReadLastTimestampSuccess();
+    await testUpdateLastTimestamp();
+    await testCreateGCSClientSuccess();
+    await testCreateGCSClientMissingEnv();
+    await testExtractNewClipsFiltering();
+    await testGetVideoClipsDevice();
+    await testGetVideoClipsDeviceNoDevices();
+    await testGetScryptedRuntimeTestFilter();
+    await testMainMock();
+    await testGetScryptedRuntimeProd();
+    await testGetScryptedRuntimeFail();
+    await testConnectSdk();
+    await testConnectSdkFunction();
+    await testConnectSdkNonFunction();
+    await testLogLevels();
+    await testGetVideoClipsDeviceProdNoVideoClips();
+    await testGetVideoClipsDeviceProdNoInterface();
+    await testGetVideoClipsDeviceProdSuccess();
+    await testMainFullFlow();
+    await testMainEmptyClips();
+    await testMainNoClips();
+    await testMainWithFailures();
+    await testMainSuccess();
+    console.log('All backup tests passed');
+    process.exit(0);
+  } catch (error) {
+    console.error('Test failed:', error);
+    process.exit(1);
+  }
+})();
+
   try {
     await backup.main();
     assert.ok(connectStub.calledOnce);

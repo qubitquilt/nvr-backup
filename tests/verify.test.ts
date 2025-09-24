@@ -1,4 +1,10 @@
 
+
+
+/* eslint-disable no-global-assign, @typescript-eslint/no-var-requires, @typescript-eslint/no-unused-vars, prefer-const */
+
+
+
 // verify.test.ts - Unit tests for verify.ts using ts-node compatible assertions
 // Run with: ts-node tests/verify.test.ts
 
