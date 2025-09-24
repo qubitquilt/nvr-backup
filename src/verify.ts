@@ -29,7 +29,7 @@ if (process.env.NODE_ENV === 'test') {
     connect = undefined as any;
     ScryptedInterface = {};
   }
-  const { Storage } = require('@google-cloud/storage');
+  const { Storage } = require('@google-cloud/storage'); // eslint-disable-line @typescript-eslint/no-var-requires
   GCSStorage = Storage;
 }// Load environment variables
 
