@@ -15,7 +15,7 @@ Last updated: 2025-09-18
 - Source code lives under src/
   - Main job runner: [main()](src/backup.ts:190)
   - Utilities and helpers live colocated near usage; prefer file-local helpers unless reused elsewhere
-- Docs structured per BMAD
+- Docs structured per GitHub Spec Kit (https://github.com/github/spec-kit)
   - PRD: docs/prd.md plus shards under docs/prd/
   - Architecture: docs/architecture.md with shard files under docs/architecture/
   - QA: docs/qa/

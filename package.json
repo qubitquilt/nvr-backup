@@ -7,7 +7,10 @@
     "build": "tsc",
     "start": "node dist/backup.js",
     "dev": "ts-node src/backup.ts",
-    "test": "ts-node src/test-scrypted.ts",
+    "test": "npm run lint && npm run test:coverage",
+    "test:unit": "ts-node tests/backup.test.ts",
+    "test:coverage": "nyc --reporter=lcov --reporter=text npm run test:unit",
+    "test:smoke": "ts-node src/test-scrypted.ts",
     "verify": "ts-node src/verify.ts",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix"
@@ -18,9 +21,15 @@
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
+    "@istanbuljs/nyc-config-typescript": "^1.0.2",
     "@types/node": "^22.5.0",
-    "typescript": "^5.5.4",
-    "ts-node": "^10.9.2"
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.57.1",
+    "nyc": "^17.1.0",
+    "p-limit": "^2.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
   },
   "engines": {
     "node": ">=18.0.0"

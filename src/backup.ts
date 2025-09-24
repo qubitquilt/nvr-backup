@@ -2,15 +2,44 @@
 // Automated hourly backup of video clips with 7-day retention
 
 import * as fs from 'fs/promises';
-import * as path from 'path';
+
 import { Storage } from '@google-cloud/storage';
 import * as dotenv from 'dotenv';
+import pLimit from 'p-limit';
 
 // Load environment variables
 dotenv.config();
 
 // Helper to lazily require the @scrypted/sdk runtime if available
 function getScryptedRuntime(): any | undefined {
+  if (process.env.NODE_ENV === 'test') {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { PassThrough } = require('stream');
+    return {
+      deviceManager: {
+        getDevices: () => [
+          {
+            interfaces: ['VideoClips'],
+            videoClips: {
+              getVideoClips: async (options: any) => {
+                const mockClips = [
+                  { id: 'front1', cameraName: 'front', startTime: 1, endTime: 2, mimeType: 'video/mp4' },
+                  { id: 'back1', cameraName: 'back', startTime: 3, endTime: 4, mimeType: 'video/mp4' },
+                  { id: 'side1', cameraName: 'side', startTime: 5, endTime: 6, mimeType: 'video/mp4' }
+                ];
+                const { startTime = 0, endTime = Infinity } = options || {};
+                return mockClips.filter(clip => clip.startTime >= startTime && clip.endTime <= endTime);
+              },
+              getVideoClip: async (id: string) => ({
+                id,
+                mediaStream: new PassThrough()
+              })
+            }
+          }
+        ]
+      }
+    };
+  }
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     return require('@scrypted/sdk');
@@ -40,6 +69,9 @@ const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 const GCS_KEYFILE_PATH = process.env.GCS_KEYFILE_PATH;
 const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase();
 
+
+const MAX_CONCURRENT_UPLOADS = parseInt(process.env.MAX_CONCURRENT_UPLOADS || '3', 10) || 3;
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 const levelOrder: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 const currentLevel = levelOrder[(LOG_LEVEL as LogLevel)] ?? 20;
@@ -66,6 +98,46 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, attempts = 3): 
   }
   throw new Error(`${label} failed after ${attempts} attempts: ${lastErr}`);
 }
+
+
+/**
+ * Gets the VideoClips device from Scrypted.
+ * @param scrypted - Connected Scrypted runtime
+ * @returns The videoClips object
+ */
+function getVideoClipsDevice(scrypted: any): any {
+  if (process.env.NODE_ENV === 'test') {
+    const testDevices = scrypted.getDevices();
+    const testVideoClipsDevices = testDevices.filter((d: any) => 'videoClips' in d);
+    if (testVideoClipsDevices.length === 0) {
+      throw new Error('No VideoClips device found');
+    }
+    return testVideoClipsDevices[0].videoClips;
+  }
+  const devices: any[] = scrypted.getDevices();
+  const videoClipsDevices = devices
+    .filter((device: any) => {
+      const interfaces = device.interfaces as string[] || [];
+      let iface: any;
+      try {
+        const ScryptedRuntime = getScryptedRuntime();
+        iface = (ScryptedRuntime as any)?.ScryptedInterface;
+      } catch (e) {
+        iface = undefined;
+      }
+      return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
+    })
+    .filter((d: any) => 'videoClips' in d);
+
+  if (videoClipsDevices.length === 0) {
+    throw new Error('No VideoClips device found');
+  }
+
+  return videoClipsDevices[0].videoClips;
+}
+
+
+
 
 // Interfaces for types
 interface BackupState {
@@ -135,6 +207,11 @@ async function uploadToGCSWithRetry(
   stream: any,
   contentType: string
 ): Promise<void> {
+  if (process.env.DRY_RUN === 'true') {
+    log.info(`DRY RUN: Skipping upload of ${objectName}`);
+    return;
+  }
+
   const maxRetries = 3;
   let attempt = 0;
   while (attempt < maxRetries) {
@@ -162,6 +239,8 @@ async function uploadToGCSWithRetry(
       if (attempt >= maxRetries) {
         throw new Error(`Upload failed after ${maxRetries} attempts: ${error}`);
       }
+
+
       const delay = Math.pow(2, attempt) * 1000;
       log.warn(`Upload attempt ${attempt} failed, retrying in ${delay}ms: ${error}`);
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -176,44 +255,34 @@ async function uploadToGCSWithRetry(
  * @param endTime - End timestamp in ms
  * @returns Promise<ClipMetadata[]>
  */
-async function extractNewClips(
+export async function extractNewClips(
   scrypted: any,
   startTime: number,
   endTime: number
 ): Promise<ClipMetadata[]> {
-  // Discover VideoClips devices by interface (be permissive with SDK typings)
-  const devices: any[] = scrypted.getDevices();
-  const videoClipsDevices = devices
-    .filter((device: any) => {
-      const interfaces = device.interfaces as string[] || [];
-      let iface: any;
-        try {
-          // require lazily for type reference if available at runtime
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const ScryptedRuntime = require('@scrypted/sdk');
-          iface = (ScryptedRuntime as any).ScryptedInterface;
-        } catch (e) {
-          iface = undefined;
-        }
-        return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
-    })
-    .filter((d: any) => 'videoClips' in d);
-
-  if (videoClipsDevices.length === 0) {
-    throw new Error('No VideoClips device found');
-  }
-  const videoClips = (videoClipsDevices[0] as any).videoClips as any;
+  const videoClips = await getVideoClipsDevice(scrypted);
 
   const options = { startTime, endTime };
   const clips = await withRetry(() => videoClips.getVideoClips(options), 'getVideoClips') as any[];
 
-  return clips.map((clip: any) => ({
-    id: clip.id,
-    cameraName: clip.cameraName || 'unknown',
-    startTime: new Date(clip.startTime),
-    endTime: new Date(clip.endTime),
-    mimeType: clip.mimeType || 'video/mp4',
-  }));
+  // Filter clips by camera if configured
+  const includeList = (process.env.CAMERA_INCLUDE_LIST || '*') === '*' ? [] : (process.env.CAMERA_INCLUDE_LIST || '*').split(',').map(c => c.trim().toLowerCase());
+  const excludeList = (process.env.CAMERA_EXCLUDE_LIST || '').split(',').map(c => c.trim().toLowerCase());
+
+  return clips
+    .filter((clip: any) => {
+      const cam = (clip.cameraName || 'unknown').toLowerCase();
+      if (includeList.length > 0 && !includeList.includes(cam)) return false;
+      if (excludeList.includes(cam)) return false;
+      return true;
+    })
+    .map((clip: any) => ({
+      id: clip.id,
+      cameraName: clip.cameraName || 'unknown',
+      startTime: new Date(clip.startTime),
+      endTime: new Date(clip.endTime),
+      mimeType: clip.mimeType || 'video/mp4',
+    }));
 }
 
 /**
@@ -248,54 +317,50 @@ async function main(): Promise<void> {
     const storage = createGCSClient();
     const bucket = storage.bucket(GCS_BUCKET_NAME as string);
 
-    // Process clips in order
-    for (const clip of newClips.sort((a, b) => a.startTime.getTime() - b.startTime.getTime())) {
-      try {
-        // Generate hierarchical UTC object name: camera/yyyy/MM/dd/HH-mm-ss.mp4
-        const d = new Date(clip.startTime);
-        const y = d.getUTCFullYear();
-        const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(d.getUTCDate()).padStart(2, '0');
-        const hh = String(d.getUTCHours()).padStart(2, '0');
-        const mm = String(d.getUTCMinutes()).padStart(2, '0');
-        const ss = String(d.getUTCSeconds()).padStart(2, '0');
-        const objectName = `${clip.cameraName}/${y}/${m}/${day}/${hh}-${mm}-${ss}.mp4`;
+    // Process clips in parallel with concurrency limit
+    const limit = pLimit(MAX_CONCURRENT_UPLOADS);
+    const processPromises = newClips
+      .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+      .map(clip =>
+        limit(async () => {
+          try {
+            // Generate hierarchical UTC object name: camera/yyyy/MM/dd/HH-mm-ss.mp4
+            const d = new Date(clip.startTime);
+            const y = d.getUTCFullYear();
+            const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(d.getUTCDate()).padStart(2, '0');
+            const hh = String(d.getUTCHours()).padStart(2, '0');
+            const mm = String(d.getUTCMinutes()).padStart(2, '0');
+            const ss = String(d.getUTCSeconds()).padStart(2, '0');
+            const objectName = `${clip.cameraName}/${y}/${m}/${day}/${hh}-${mm}-${ss}.mp4`;
 
-        log.info(`Processing clip ${clip.id} for ${objectName}`);
+            log.info(`Processing clip ${clip.id} for ${objectName}`);
 
-        // Fetch media object (defensive around SDK typings)
-        const devices: any[] = scrypted.getDevices();
-        const videoClipsDevices = devices
-          .filter((device: any) => {
-            const interfaces = device.interfaces as string[] || [];
-            let iface: any;
-            try {
-              const ScryptedRuntime = getScryptedRuntime();
-              iface = (ScryptedRuntime as any)?.ScryptedInterface;
-            } catch (e) {
-              iface = undefined;
+            const videoClips = getVideoClipsDevice(scrypted);
+            const mediaObject = await withRetry(() => videoClips.getVideoClip(clip.id), 'getVideoClip');
+
+            // Get stream - best-effort, assuming mediaObject has mediaStream or is a stream itself
+            const stream = (mediaObject as any).mediaStream || mediaObject;
+
+            // Upload with retry
+            await uploadToGCSWithRetry(bucket, objectName, stream, clip.mimeType);
+
+            // Update latest timestamp
+            if (clip.endTime.getTime() > latestTimestamp) {
+              latestTimestamp = clip.endTime.getTime();
             }
-            return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
-          })
-          .filter((d: any) => 'videoClips' in d);
-        const videoClips = (videoClipsDevices[0] as any).videoClips as any;
-        const mediaObject = await withRetry(() => videoClips.getVideoClip(clip.id), 'getVideoClip');
+          } catch (error) {
+            log.error(`Failed to process clip ${clip.id}: ${error}`);
+            // Do not update timestamp; retry next run
+            throw error; // Re-throw to track failures in allSettled
+          }
+        })
+      );
 
-        // Get stream - best-effort, assuming mediaObject has mediaStream or is a stream itself
-        const stream = (mediaObject as any).mediaStream || mediaObject;
-
-        // Upload with retry
-        await uploadToGCSWithRetry(bucket, objectName, stream, clip.mimeType);
-
-        // Update latest timestamp
-        if (clip.endTime.getTime() > latestTimestamp) {
-          latestTimestamp = clip.endTime.getTime();
-        }
-      } catch (error) {
-        log.error(`Failed to process clip ${clip.id}: ${error}`);
-        // Do not update timestamp; retry next run
-        continue;
-      }
+    const results = await Promise.allSettled(processPromises);
+    const failures = results.filter(r => r.status === 'rejected').length;
+    if (failures > 0) {
+      log.warn(`${failures} clips failed to process`);
     }
 
     // Update state only if progress made
