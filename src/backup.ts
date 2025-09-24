@@ -187,15 +187,15 @@ async function extractNewClips(
     .filter((device: any) => {
       const interfaces = device.interfaces as string[] || [];
       let iface: any;
-        try {
-          // require lazily for type reference if available at runtime
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const ScryptedRuntime = require('@scrypted/sdk');
-          iface = (ScryptedRuntime as any).ScryptedInterface;
-        } catch (e) {
-          iface = undefined;
-        }
-        return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
+      try {
+        // require lazily for type reference if available at runtime
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const ScryptedRuntime = require('@scrypted/sdk');
+        iface = (ScryptedRuntime as any).ScryptedInterface;
+      } catch (e) {
+        iface = undefined;
+      }
+      return interfaces.includes(iface?.VideoClips) || interfaces.includes('VideoClips');
     })
     .filter((d: any) => 'videoClips' in d);
 
