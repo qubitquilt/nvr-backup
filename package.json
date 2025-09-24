@@ -11,8 +11,8 @@
     "test:unit": "ts-node tests/backup.test.ts",
     "test:smoke": "ts-node src/test-scrypted.ts",
     "verify": "ts-node src/verify.ts",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix"
+    "lint": "eslint --config .eslintrc.json . --ext .ts",
+    "lint:fix": "eslint --config .eslintrc.json . --ext .ts --fix"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.12.1",
