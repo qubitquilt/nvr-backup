@@ -69,6 +69,10 @@ Create a `.env` file in the project root or export the following variables:
 - `GCS_KEYFILE_PATH` - Path to service account JSON key file
 - `STATE_FILE_PATH` - Path to local state file (default ./backup-state.json)
 - `LOG_LEVEL` - debug|info|warn|error (default info)
+- `CAMERA_INCLUDE_LIST` - Comma-separated list of camera names to include in backups (default empty; all cameras included). Use '*' to include all.
+- `CAMERA_EXCLUDE_LIST` - Comma-separated list of camera names to exclude from backups (default empty).
+- `DRY_RUN` - Set to 'true' to simulate backup without uploading to GCS or updating state file (default false).
+- `CONCURRENCY` - Maximum number of concurrent clip uploads (default 3).
 
 Example `.env` (do not commit secrets):
 
