@@ -15,11 +15,11 @@ Last updated: 2025-09-18
 - Source code lives under src/
   - Main job runner: [main()](src/backup.ts:190)
   - Utilities and helpers live colocated near usage; prefer file-local helpers unless reused elsewhere
-- Docs structured per BMAD
-  - PRD: docs/prd.md plus shards under docs/prd/
-  - Architecture: docs/architecture.md with shard files under docs/architecture/
-  - QA: docs/qa/
-  - Stories: docs/stories/
+- Docs structured per GitHub Spec Kit
+  - Specifications: docs/specs/ with executable specs generated via specify CLI
+  - Architecture: docs/architecture.md integrated with spec-driven plans
+  - QA: docs/qa/ aligned with spec validation
+  - Stories: docs/stories/ derived from spec tasks
 - Tools and sample assets: tools/ for operational JSON and scripts (e.g., tools/gcs-lifecycle-7d.json)
 
 3. Style conventions
