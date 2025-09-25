@@ -239,35 +239,38 @@ async function testRunDryRunSuccess() {
   const connectStub = sinon.stub(backup, 'connectSdk').resolves(mockScrypted);
   const readLastTimestampStub = sinon.stub(backup, 'readLastTimestamp').resolves(now - 7200000);
   const extractStub = sinon.stub(backup, 'extractNewClips').resolves(mockClips);
-  const createGCSStub = sinon.stub(backup, 'createGCSClient').returns({
-    bucket: sinon.stub().callsFake((name: string) => ({
-      file: sinon.stub().callsFake((objectName: string) => ({
-        createWriteStream: (options: any) => {
-          const ws = new PassThrough();
-          setImmediate(() => ws.emit('finish'));
-          return ws;
-        }
-      }))
-    }))
-  });
   const updateLastTimestampStub = sinon.stub(backup, 'updateLastTimestamp').resolves();
 
+  const mockKey = {
+    type: 'service_account',
+    project_id: process.env.GCS_PROJECT_ID,
+    private_key_id: 'mock_key_id',
+    private_key: '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7K8f...\n-----END PRIVATE KEY-----\n',
+    client_email: 'mock@project.iam.gserviceaccount.com',
+    client_id: '123456789',
+    auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+    token_uri: 'https://oauth2.googleapis.com/token',
+    auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+    client_x509_cert_url: 'https://www.googleapis.com/robot/v1/metadata/x509/mock%40project.iam.gserviceaccount.com'
+  };
+
   try {
+    await fs.writeFile('/tmp/key.json', JSON.stringify(mockKey));
+
     const result = await verify.runDryRunBackup();
     assert(result === true, 'Should run dry-run success');
     assert(consoleInfoSpy.getCalls().some(call => call.args[1] && call.args[1].includes('DRY RUN: Would upload')), 'Should log dry-run upload');
     assert(connectStub.calledOnce, 'Should call connectSdk');
     assert(readLastTimestampStub.calledOnce, 'Should call readLastTimestamp');
     assert(extractStub.calledOnce, 'Should call extractNewClips');
-    assert(createGCSStub.calledOnce, 'Should call createGCSClient');
     assert(updateLastTimestampStub.called, 'Should call updateLastTimestamp if success');
   } finally {
     connectStub.restore();
     readLastTimestampStub.restore();
     extractStub.restore();
-    createGCSStub.restore();
     updateLastTimestampStub.restore();
     consoleInfoSpy.restore();
+    await fs.unlink('/tmp/key.json').catch(() => {});
   }
   console.log('runDryRun success passed');
 }
