@@ -160,8 +160,10 @@ async function verifyGCSLifecyclePolicy(): Promise<boolean> {
 async function runDryRunBackup(): Promise<boolean> {
   log.info('Starting dry-run backup...');
   // Temporarily override upload function to prevent actual uploads
-  const originalUpload = (global as any).uploadToGCSWithRetry;
-  (global as any).uploadToGCSWithRetry = async (bucket: any, objectName: string, stream: any, contentType: string) => {
+  // @ts-ignore
+  const originalUpload = (backup as any).uploadToGCSWithRetry;
+  // @ts-ignore
+  (backup as any).uploadToGCSWithRetry = async (bucket: any, objectName: string, stream: any, contentType: string) => {
     log.info(`DRY RUN: Would upload ${objectName} with content type ${contentType}`);
     // Simulate stream consumption
     if (stream && typeof stream.read === 'function') {
@@ -180,7 +182,8 @@ async function runDryRunBackup(): Promise<boolean> {
     return false;
   } finally {
     // Restore original upload function
-    (global as any).uploadToGCSWithRetry = originalUpload;
+    // @ts-ignore
+    (backup as any).uploadToGCSWithRetry = originalUpload;
   }
 }
 

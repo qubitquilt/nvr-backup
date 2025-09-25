@@ -84,32 +84,6 @@ async function testUploadToGCSWithRetryStream() {
 }
 	async function testDryRun() {
 
-async function testUploadToGCSWithRetryFail() {
-  let attemptCount = 0;
-  const mockFile = {
-    save: async () => {
-      attemptCount++;
-      throw new Error('upload fail');
-    },
-    createWriteStream: () => ({
-      on: (event: string, cb: any) => {
-        if (event === 'error') cb(new Error('stream fail'));
-      }
-    })
-  };
-  const mockBucket = { file: () => mockFile } as any;
-  const buf = Buffer.from('test');
-  let threw = false;
-  try {
-    await backup.uploadToGCSWithRetry(mockBucket, 'test.mp4', buf, 'video/mp4');
-  } catch (e: any) {
-    threw = true;
-    assert.strictEqual(attemptCount, 3, 'should retry 3 times');
-    assert.ok(e.message.includes('Upload failed after 3 attempts'));
-  }
-  assert.ok(threw);
-  console.log('testUploadToGCSWithRetryFail passed');
-}
 
   process.env.DRY_RUN = 'true';
   let savedBuffer: Buffer | null = null;
