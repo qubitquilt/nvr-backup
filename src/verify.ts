@@ -168,6 +168,7 @@ async function runDryRunBackup(): Promise<boolean> {
       while (stream.read());
     }
     await sleep(100); // Simulate network delay
+    return true;
   };
 
   try {

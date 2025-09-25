@@ -3,6 +3,8 @@
 
 /* eslint-disable no-global-assign, @typescript-eslint/no-var-requires, @typescript-eslint/no-unused-vars, prefer-const */
 
+import { PassThrough } from 'stream';
+import * as fs from 'fs/promises';
 
 
 // verify.test.ts - Unit tests for verify.ts using ts-node compatible assertions
@@ -205,46 +207,67 @@ async function testVerifyGCSLifecycleWrongAge() {
 
 async function testRunDryRunSuccess() {
   console.log('Testing runDryRunBackup success...');
-  const mockScrypted = backup.getScryptedRuntime();
-  const connectStub = sinon.stub(backup, 'connectSdk').resolves(mockScrypted);
-  const readStub = sinon.stub(backup, 'readLastTimestamp').resolves(Date.now() - 7200000); // 2 hours ago to ensure clips are new
-  const extractStub = sinon.stub(backup, 'extractNewClips').resolves([{
+  const consoleInfoSpy = sinon.spy(console, 'info');
+
+  const now = Date.now();
+  const mockClips = [{
     id: 'test-clip',
     cameraName: 'test-cam',
-    startTime: new Date(Date.now() - 3600000),
-    endTime: new Date(),
+    startTime: now - 3600000,
+    endTime: now,
     mimeType: 'video/mp4'
-  }]);
-  const getVideoClipStub = sinon.stub(mockScrypted.deviceManager.getDevices()[0].videoClips, 'getVideoClip').resolves({
-    mediaStream: new PassThrough()
-  });
-  const originalUpload = (global as any).uploadToGCSWithRetry;
-  let uploadCalled = false;
-  (global as any).uploadToGCSWithRetry = async (bucket: any, objectName: string, stream: any, contentType: string) => {
-    uploadCalled = true;
-    console.log(`DRY RUN: Would upload ${objectName} with content type ${contentType}`);
-    if (stream && typeof stream.pipe === 'function') {
-      stream.on('end', () => {});
-      stream.resume();
+  }];
+  const mockScrypted = {
+    deviceManager: {
+      getDevices: () => [{
+        interfaces: ['VideoClips'],
+        videoClips: {
+          getVideoClips: async (options: any) => {
+            const { startTime = 0, endTime = Infinity } = options || {};
+            return mockClips.filter(clip => clip.startTime >= startTime && clip.endTime <= endTime);
+          },
+          getVideoClip: async (id: string) => {
+            const stream = new PassThrough();
+            stream.end(Buffer.from('mock video data'));
+            return { id, mediaStream: stream };
+          }
+        }
+      }]
     }
-    await new Promise(resolve => setTimeout(resolve, 100));
   };
-  const originalUpdateTimestamp = backup.updateLastTimestamp;
-  backup.updateLastTimestamp = async () => {}; // no-op for test
+
+  const connectStub = sinon.stub(backup, 'connectSdk').resolves(mockScrypted);
+  const readLastTimestampStub = sinon.stub(backup, 'readLastTimestamp').resolves(now - 7200000);
+  const extractStub = sinon.stub(backup, 'extractNewClips').resolves(mockClips);
+  const createGCSStub = sinon.stub(backup, 'createGCSClient').returns({
+    bucket: sinon.stub().callsFake((name: string) => ({
+      file: sinon.stub().callsFake((objectName: string) => ({
+        createWriteStream: (options: any) => {
+          const ws = new PassThrough();
+          setImmediate(() => ws.emit('finish'));
+          return ws;
+        }
+      }))
+    }))
+  });
+  const updateLastTimestampStub = sinon.stub(backup, 'updateLastTimestamp').resolves();
+
   try {
     const result = await verify.runDryRunBackup();
     assert(result === true, 'Should run dry-run success');
-    assert(uploadCalled, 'Should call upload for clips in dry-run');
-    assert(extractStub.calledOnce, 'Should call extractNewClips');
-    assert(readStub.calledOnce, 'Should call readLastTimestamp');
+    assert(consoleInfoSpy.getCalls().some(call => call.args[1] && call.args[1].includes('DRY RUN: Would upload')), 'Should log dry-run upload');
     assert(connectStub.calledOnce, 'Should call connectSdk');
+    assert(readLastTimestampStub.calledOnce, 'Should call readLastTimestamp');
+    assert(extractStub.calledOnce, 'Should call extractNewClips');
+    assert(createGCSStub.calledOnce, 'Should call createGCSClient');
+    assert(updateLastTimestampStub.called, 'Should call updateLastTimestamp if success');
   } finally {
     connectStub.restore();
-    readStub.restore();
+    readLastTimestampStub.restore();
     extractStub.restore();
-    getVideoClipStub.restore();
-    (global as any).uploadToGCSWithRetry = originalUpload;
-    backup.updateLastTimestamp = originalUpdateTimestamp;
+    createGCSStub.restore();
+    updateLastTimestampStub.restore();
+    consoleInfoSpy.restore();
   }
   console.log('runDryRun success passed');
 }
@@ -276,7 +299,6 @@ async function testRunDryRunWithClipsIntegration() {
   };
   const result = await verify.runDryRunBackup();
   backup.main = originalBackupMain;
-  (global as any).uploadToGCSWithRetry = originalUpload;
   assert(result === true, 'Should integrate with backup.main');
   assert(mainCalled, 'Should call backup.main in dry-run');
   console.log('testRunDryRunWithClipsIntegration passed');
@@ -312,7 +334,6 @@ async function testMainVerification() {
     return Promise.resolve();
   };
   await verify.mainVerification();
-  (global as any).uploadToGCSWithRetry = originalUpload;
   console.log('mainVerification passed (no crash)');
 }
 
@@ -379,7 +400,6 @@ async function testMainVerificationScryptedFail() {
   // Capture console.error for error logs
   const consoleErrorSpy = sinon.spy(console, 'error');
   await verify.mainVerification();
-  (global as any).uploadToGCSWithRetry = originalUpload;
   consoleErrorSpy.restore();
   assert(consoleErrorSpy.called, 'Should log Scrypted error');
   console.log('testMainVerificationScryptedFail passed (error logged)');
@@ -403,7 +423,6 @@ async function testMainVerificationGCSFail() {
   };
   const consoleErrorSpy = sinon.spy(console, 'error');
   await verify.mainVerification();
-  (global as any).uploadToGCSWithRetry = originalUpload;
   consoleErrorSpy.restore();
   assert(consoleErrorSpy.called, 'Should log GCS error');
   console.log('testMainVerificationGCSFail passed (error logged)');
