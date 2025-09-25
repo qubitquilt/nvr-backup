@@ -508,6 +508,43 @@ async function testMainFullFlow() {
   console.log('testMainFullFlow passed');
 }
 
+
+	async function testMainConcurrency() {
+	  // Test concurrency with p-limit by providing multiple clips and limiting to 2 concurrent
+	  process.env.MAX_CONCURRENT_UPLOADS = '2';
+	  const mockClips = Array.from({length: 5}, (_, i) => ({
+	    id: `clip${i}`,
+	    cameraName: 'front',
+	    startTime: new Date(Date.now() - (i+1)*1000),
+	    endTime: new Date(Date.now() - i*1000),
+	    mimeType: 'video/mp4'
+	  }));
+	  const connectStub = sinon.stub(backup, 'connectSdk').resolves(backup.getScryptedRuntime());
+	  const extractStub = sinon.stub(backup, 'extractNewClips').resolves(mockClips);
+	  const readStub = sinon.stub(backup, 'readLastTimestamp').resolves(Date.now() - 10000);
+	  const uploadStub = sinon.stub(backup, 'uploadToGCSWithRetry').resolves();
+	  const updateStub = sinon.stub(backup, 'updateLastTimestamp').resolves();
+	  // Don't mock p-limit to allow real concurrency execution for coverage
+	  try {
+	    await backup.main();
+	    assert.ok(connectStub.calledOnce);
+	    assert.ok(extractStub.calledOnce);
+	    assert.ok(readStub.calledOnce);
+	    assert.strictEqual(uploadStub.callCount, 5, 'Should upload all 5 clips');
+	    assert.ok(updateStub.calledOnce, 'Should update timestamp once after all uploads');
+	  } finally {
+	    connectStub.restore();
+	    extractStub.restore();
+	    readStub.restore();
+	    uploadStub.restore();
+	    updateStub.restore();
+	    process.env.MAX_CONCURRENT_UPLOADS = undefined;
+	  }
+	  console.log('testMainConcurrency passed');
+	}
+
+
+
 async function testMainEmptyClips() {
   const connectStub = sinon.stub(backup, 'connectSdk').resolves(backup.getScryptedRuntime());
   const extractStub = sinon.stub(backup, 'extractNewClips').resolves([]);
